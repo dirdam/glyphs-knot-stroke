@@ -11,11 +11,18 @@ import pathops
 OFFSET_CURVE = NSClassFromString("GlyphsFilterOffsetCurve")
 
 
-def read_paths(layer):
-    """Layer paths -> knot.py path dicts. Raises ValueError on quadratic curves."""
+def selected_paths(layer):
+    """Paths with at least one selected node, or all paths when none is selected (e.g. on export)."""
+    paths = [layer.paths[i] for i in range(len(layer.paths))]
+    selection = [layer.selection[i] for i in range(len(layer.selection))]
+    picked = [p for p in paths if any(p.nodes[i] in selection for i in range(len(p.nodes)))]
+    return picked or paths
+
+
+def read_paths(paths):
+    """Glyphs paths -> knot.py path dicts. Raises ValueError on quadratic curves."""
     out = []
-    for pi in range(len(layer.paths)):
-        path = layer.paths[pi]
+    for path in paths:
         # Index loops only: Glyphs' segment objects wrap around when iterated with `for`, which never ends.
         nodes = [path.nodes[i] for i in range(len(path.nodes))]
         starts = [i for i, n in enumerate(nodes) if n.type != OFFCURVE]
@@ -125,9 +132,9 @@ def difference(a, b):
     return pathops.op(a, b, pathops.PathOp.DIFFERENCE)
 
 
-def pathops_to_layer(result, layer):
-    """Replace layer's paths with the contours of a pathops.Path."""
-    for path in [layer.paths[i] for i in range(len(layer.paths))]:
+def pathops_to_layer(result, layer, replaced):
+    """Replace the `replaced` paths of the layer with the contours of a pathops.Path; other paths stay."""
+    for path in replaced:
         layer.removeShape_(path)
     for contour in result.contours:
         nodes = []

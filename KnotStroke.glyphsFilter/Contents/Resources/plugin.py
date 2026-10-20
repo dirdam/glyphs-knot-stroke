@@ -369,7 +369,8 @@ class KnotStroke(FilterWithDialog):
 		if width_x <= 0 or width_y <= 0:
 			return
 		try:
-			paths = ops.read_paths(layer)
+			targets = ops.selected_paths(layer)
+			paths = ops.read_paths(targets)
 			log("read_paths -> %d paths, segments %s" % (len(paths), [len(p["segments"]) for p in paths]))
 			if not paths:
 				return
@@ -395,7 +396,7 @@ class KnotStroke(FilterWithDialog):
 				cuts.append(ops.difference(ops.intersection(band, under), over))
 
 			result = ops.difference(full, ops.union(cuts)) if cuts else full
-			ops.pathops_to_layer(result, layer)
+			ops.pathops_to_layer(result, layer, targets)
 			log("done: %d contours written" % len(list(result.contours)))
 		except Exception:
 			log(traceback.format_exc())
