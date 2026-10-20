@@ -219,7 +219,7 @@ class KnotStroke(FilterWithDialog):
 			Glyphs.registerDefault(PREFIX + key, value)
 
 		try:
-			self.group = Group((0, 0, 250, 176))
+			self.group = Group((0, 0, 216, 176))
 			# columns: label (right-aligned), then the number field holding its symbol on the left and its stepper on the right
 			self.group.hLabel = TextBox((6, 12, 100, 17), "Horizontal", alignment="right")
 			self.group.hField = StepEditText((108, 10, 72, 21), "", callback=self.fieldChanged)
@@ -233,11 +233,11 @@ class KnotStroke(FilterWithDialog):
 			self.group.gSymbol = ImageView((113, 76, 16, 17))
 			self.group.flipLabel = TextBox((6, 104, 100, 17), "Invert", alignment="right")
 			self.group.flip = CheckBox((108, 104, 24, 20), "", callback=self.fieldChanged)
-			self.group.cap = SegmentedButton((30, 134, 190, 30), [{"imageObject": cap_icon(i), "imageTemplate": False, "width": 36} for i in range(len(CAP_STYLES))],
+			self.group.cap = SegmentedButton((14, 134, 188, 30), [{"imageObject": cap_icon(i), "imageTemplate": False, "width": 36} for i in range(len(CAP_STYLES))],
 				callback=self.fieldChanged, sizeStyle="regular")
 			self.group.cap.getNSSegmentedButton().setSegmentStyle_(0)  # automatic: the rounded gray track with a white pill
 			self.dialog = self.group.getNSView()
-			self.dialog.setFrame_(((0, 0), (250, 176)))
+			self.dialog.setFrame_(((0, 0), (216, 176)))
 			for key, name in (("hSymbol", "arrow.left.and.right"), ("vSymbol", "arrow.up.and.down")):
 				view = getattr(self.group, key).getNSImageView()
 				view.setImage_(NSImage.imageWithSystemSymbolName_accessibilityDescription_(name, None))
