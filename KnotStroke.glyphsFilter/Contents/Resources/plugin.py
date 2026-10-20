@@ -17,8 +17,8 @@ import traceback
 import objc
 from GlyphsApp import Glyphs
 from GlyphsApp.plugins import FilterWithDialog
-from AppKit import NSImage, NSBezierPath, NSColor, NSMakeSize
-from vanilla import Group, TextBox, EditText, CheckBox, ImageButton, SegmentedButton
+from AppKit import NSImage, NSBezierPath, NSColor, NSMakeSize, NSStepper, NSObject, NSTextField, NSTextFieldCell
+from vanilla import Group, TextBox, EditText, CheckBox, ImageButton, ImageView, SegmentedButton
 from vanilla.vanillaEditText import VanillaEditTextDelegate
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -102,6 +102,21 @@ def cap_icon(index):
 	return NSImage.imageWithSize_flipped_drawingHandler_(NSMakeSize(26, 22), False, draw)
 
 
+def gap_icon():
+	"""Two short vertical bars with a clear space between them, matching the weight of the axis arrows."""
+	def draw(rect):
+		NSColor.labelColor().set()
+		for x in (3.5, 12.5):
+			bar = NSBezierPath.bezierPath()
+			bar.moveToPoint_((x, 3))
+			bar.lineToPoint_((x, 14))
+			bar.setLineWidth_(1.5)
+			bar.setLineCapStyle_(1)
+			bar.stroke()
+		return True
+	return NSImage.imageWithSize_flipped_drawingHandler_(NSMakeSize(16, 17), False, draw)
+
+
 def fmt(value):
 	return "%g" % value
 
@@ -122,8 +137,66 @@ class StepDelegate(VanillaEditTextDelegate):
 		return True
 
 
+class InsetCell(NSTextFieldCell):
+	"""Leaves room inside the field for the symbol on the left and the stepper on the right."""
+	left = 24
+	right = 20
+	editing = False  # the frame handed to the editor is already inset: don't inset it a second time
+
+	@objc.python_method
+	def inset(self, rect):
+		(x, y), (w, h) = rect
+		return ((x + self.left, y), (w - self.left - self.right, h))
+
+	def drawingRectForBounds_(self, rect):
+		rect = objc.super(InsetCell, self).drawingRectForBounds_(rect)
+		return rect if self.editing else self.inset(rect)
+
+	def editWithFrame_inView_editor_delegate_event_(self, rect, view, editor, delegate, event):
+		self.editing = True
+		try:
+			objc.super(InsetCell, self).editWithFrame_inView_editor_delegate_event_(self.inset(rect), view, editor, delegate, event)
+		finally:
+			self.editing = False
+
+	def selectWithFrame_inView_editor_delegate_start_length_(self, rect, view, editor, delegate, start, length):
+		self.editing = True
+		try:
+			objc.super(InsetCell, self).selectWithFrame_inView_editor_delegate_start_length_(self.inset(rect), view, editor, delegate, start, length)
+		finally:
+			self.editing = False
+
+	def resetCursorRect_inView_(self, rect, view):
+		# the text cursor only over the number, not over the symbol and the stepper
+		self.editing = True
+		try:
+			objc.super(InsetCell, self).resetCursorRect_inView_(self.inset(rect), view)
+		finally:
+			self.editing = False
+
+
+class InsetTextField(NSTextField):
+	@classmethod
+	def cellClass(cls):
+		return InsetCell
+
+
 class StepEditText(EditText):
+	nsTextFieldClass = InsetTextField
 	nsTextFieldDelegateClass = StepDelegate
+
+
+class StepperTarget(NSObject):
+	"""Receives the clicks of the up/down steppers next to the number fields."""
+
+	def initWithPlugin_(self, plugin):
+		self = objc.super(StepperTarget, self).init()
+		self.plugin = plugin
+		return self
+
+	@objc.IBAction
+	def stepped_(self, sender):
+		self.plugin.stepperClicked(sender)
 
 
 class KnotStroke(FilterWithDialog):
@@ -145,20 +218,50 @@ class KnotStroke(FilterWithDialog):
 
 		try:
 			self.group = Group((0, 0, 250, 176))
-			self.group.hLabel = TextBox((6, 12, 108, 17), "Horizontal ↔︎", alignment="right")
-			self.group.hField = StepEditText((124, 10, 88, 21), "", callback=self.fieldChanged)
-			self.group.vLabel = TextBox((6, 40, 108, 17), "Vertical ↕︎", alignment="right")
-			self.group.vField = StepEditText((124, 38, 88, 21), "", callback=self.fieldChanged)
-			self.group.lock = ImageButton((220, 24, 24, 22), bordered=False, callback=self.lockClicked)
-			self.group.gLabel = TextBox((6, 76, 108, 17), "Gap", alignment="right")
-			self.group.gField = StepEditText((124, 74, 88, 21), "", callback=self.fieldChanged)
-			self.group.flipLabel = TextBox((6, 104, 108, 17), "Invert", alignment="right")
-			self.group.flip = CheckBox((124, 102, 24, 20), "", callback=self.fieldChanged)
+			# columns: label (right-aligned), then the number field holding its symbol on the left and its stepper on the right
+			self.group.hLabel = TextBox((6, 12, 100, 17), "Horizontal", alignment="right")
+			self.group.hField = StepEditText((112, 10, 72, 21), "", callback=self.fieldChanged)
+			self.group.vLabel = TextBox((6, 40, 100, 17), "Vertical", alignment="right")
+			self.group.vField = StepEditText((112, 38, 72, 21), "", callback=self.fieldChanged)
+			self.group.lock = ImageButton((200, 24, 24, 22), bordered=False, callback=self.lockClicked)
+			self.group.gLabel = TextBox((6, 76, 100, 17), "Gap", alignment="right")
+			self.group.gField = StepEditText((112, 74, 72, 21), "", callback=self.fieldChanged)
+			self.group.hSymbol = ImageView((117, 12, 16, 17))
+			self.group.vSymbol = ImageView((117, 40, 16, 17))
+			self.group.gSymbol = ImageView((117, 76, 16, 17))
+			self.group.flipLabel = TextBox((6, 104, 100, 17), "Invert", alignment="right")
+			self.group.flip = CheckBox((112, 102, 24, 20), "", callback=self.fieldChanged)
 			self.group.cap = SegmentedButton((15, 132, 220, 36), [{"imageObject": cap_icon(i), "imageTemplate": False, "width": 44} for i in range(len(CAP_STYLES))],
 				callback=self.fieldChanged, sizeStyle="regular")
 			self.group.cap.getNSSegmentedButton().setSegmentStyle_(0)  # automatic: the rounded gray track with a white pill
 			self.dialog = self.group.getNSView()
 			self.dialog.setFrame_(((0, 0), (250, 176)))
+			for key, name in (("hSymbol", "arrow.left.and.right"), ("vSymbol", "arrow.up.and.down")):
+				view = getattr(self.group, key).getNSImageView()
+				view.setImage_(NSImage.imageWithSystemSymbolName_accessibilityDescription_(name, None))
+				view.setContentTintColor_(NSColor.labelColor())
+			self.group.gSymbol.getNSImageView().setImage_(gap_icon())
+			self.stepperTarget = StepperTarget.alloc().initWithPlugin_(self)
+			self.steppers = {}
+			for key, y in (("hField", 10), ("vField", 38), ("gField", 74)):
+				stepper = NSStepper.alloc().initWithFrame_(((0, 0), (19, 27)))
+				stepper.setControlSize_(2)  # mini: small enough to sit inside the 21 px field
+				stepper.sizeToFit()
+				size = stepper.frame().size
+				margin = (21 - size.height) / 2.0  # same gap above, below and to the right of the stepper
+				x = 112 + 72 - size.width - margin
+				InsetCell.right = size.width + margin + 2
+				stepper.setMinValue_(0)
+				stepper.setMaxValue_(100000)
+				stepper.setIncrement_(1)
+				stepper.setValueWraps_(False)
+				stepper.setTarget_(self.stepperTarget)
+				stepper.setAction_("stepped:")
+				stepper.setFrameOrigin_((x, y + margin))
+				if not self.dialog.isFlipped():
+					stepper.setFrameOrigin_((x, 176 - y - 21 + margin))
+				self.dialog.addSubview_(stepper)
+				self.steppers[key] = stepper
 			log("dialog built: %s frame=%s subviews=%d" % (self.dialog, self.dialog.frame(), len(self.dialog.subviews())))
 		except Exception:
 			log("dialog failed:\n" + traceback.format_exc())
@@ -186,6 +289,22 @@ class KnotStroke(FilterWithDialog):
 		self.showLock(bool(Glyphs.defaults[PREFIX + "linked"]))
 
 	@objc.python_method
+	def syncSteppers(self):
+		for key, stepper in self.steppers.items():
+			try:
+				stepper.setDoubleValue_(float(getattr(self.group, key).get().replace(",", ".")))
+			except ValueError:
+				pass
+		self.steppers["vField"].setEnabled_(not self.linked)
+
+	@objc.python_method
+	def stepperClicked(self, sender):
+		for key, stepper in self.steppers.items():
+			if stepper is sender:
+				getattr(self.group, key).set(fmt(stepper.doubleValue()))
+		self.fieldChanged(sender)
+
+	@objc.python_method
 	def showLock(self, linked):
 		"""Lock icon state; while locked the vertical field is grayed out and mirrors horizontal."""
 		self.linked = linked
@@ -195,6 +314,7 @@ class KnotStroke(FilterWithDialog):
 		self.group.vField.enable(not linked)
 		if linked:
 			self.group.vField.set(self.group.hField.get())
+		self.syncSteppers()
 
 	@objc.python_method
 	def lockClicked(self, sender):
@@ -217,6 +337,7 @@ class KnotStroke(FilterWithDialog):
 		Glyphs.defaults[PREFIX + "flip"] = bool(g.flip.get())
 		Glyphs.defaults[PREFIX + "cap"] = int(g.cap.get())
 		Glyphs.defaults[PREFIX + "linked"] = linked
+		self.syncSteppers()
 		self.update()
 
 	@objc.python_method
