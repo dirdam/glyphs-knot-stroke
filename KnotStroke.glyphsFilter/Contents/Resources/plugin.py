@@ -145,9 +145,9 @@ class KnotStroke(FilterWithDialog):
 
 		try:
 			self.group = Group((0, 0, 250, 176))
-			self.group.hLabel = TextBox((6, 12, 108, 17), "Horizontal", alignment="right")
+			self.group.hLabel = TextBox((6, 12, 108, 17), "Horizontal ↔︎", alignment="right")
 			self.group.hField = StepEditText((124, 10, 88, 21), "", callback=self.fieldChanged)
-			self.group.vLabel = TextBox((6, 40, 108, 17), "Vertical", alignment="right")
+			self.group.vLabel = TextBox((6, 40, 108, 17), "Vertical ↕︎", alignment="right")
 			self.group.vField = StepEditText((124, 38, 88, 21), "", callback=self.fieldChanged)
 			self.group.lock = ImageButton((220, 24, 24, 22), bordered=False, callback=self.lockClicked)
 			self.group.gLabel = TextBox((6, 76, 108, 17), "Gap", alignment="right")
