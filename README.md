@@ -17,7 +17,7 @@ Filter > Knot Stroke.
 
 | Setting | Meaning |
 | --- | --- |
-| Horizontal / Vertical | Stroke width in each direction, as in Offset Curve. Up/down arrow in a field adds/subtracts 1 |
+| Horizontal / Vertical | Stroke width in each direction, as in Offset Curve. Up/down arrow in a field adds/subtracts 1 (10 with Shift) |
 | Lock icon | While locked, Vertical is grayed out and follows Horizontal |
 | Ends | How open paths end: flat, square, round, round inset, align to axis (same buttons as Offset Curve) |
 | Gap | Space kept clear on each side of the over-strand |

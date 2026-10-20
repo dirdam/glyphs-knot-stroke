@@ -99,7 +99,9 @@ def cap_icon(index):
 		dot.setLineWidth_(1.2)
 		dot.stroke()
 		return True
-	return NSImage.imageWithSize_flipped_drawingHandler_(NSMakeSize(26, 22), False, draw)
+	image = NSImage.imageWithSize_flipped_drawingHandler_(NSMakeSize(26, 22), False, draw)
+	image.setSize_(NSMakeSize(21, 18))  # the drawing scales down to fit a compact bar
+	return image
 
 
 def gap_icon():
@@ -122,10 +124,10 @@ def fmt(value):
 
 
 class StepDelegate(VanillaEditTextDelegate):
-	"""Up/down arrow in a number field adds/subtracts 1."""
+	"""Up/down arrow in a number field adds/subtracts 1, with Shift 10 (as in Glyphs)."""
 
 	def control_textView_doCommandBySelector_(self, control, textView, selector):
-		step = {"moveUp:": 1, "moveDown:": -1}.get(selector)
+		step = {"moveUp:": 1, "moveDown:": -1, "moveUpAndModifySelection:": 10, "moveDownAndModifySelection:": -10}.get(selector)
 		if step is None:
 			return False
 		try:
@@ -220,18 +222,18 @@ class KnotStroke(FilterWithDialog):
 			self.group = Group((0, 0, 250, 176))
 			# columns: label (right-aligned), then the number field holding its symbol on the left and its stepper on the right
 			self.group.hLabel = TextBox((6, 12, 100, 17), "Horizontal", alignment="right")
-			self.group.hField = StepEditText((112, 10, 72, 21), "", callback=self.fieldChanged)
+			self.group.hField = StepEditText((108, 10, 72, 21), "", callback=self.fieldChanged)
 			self.group.vLabel = TextBox((6, 40, 100, 17), "Vertical", alignment="right")
-			self.group.vField = StepEditText((112, 38, 72, 21), "", callback=self.fieldChanged)
-			self.group.lock = ImageButton((200, 24, 24, 22), bordered=False, callback=self.lockClicked)
+			self.group.vField = StepEditText((108, 38, 72, 21), "", callback=self.fieldChanged)
+			self.group.lock = ImageButton((182, 24, 20, 22), bordered=False, callback=self.lockClicked)
 			self.group.gLabel = TextBox((6, 76, 100, 17), "Gap", alignment="right")
-			self.group.gField = StepEditText((112, 74, 72, 21), "", callback=self.fieldChanged)
-			self.group.hSymbol = ImageView((117, 12, 16, 17))
-			self.group.vSymbol = ImageView((117, 40, 16, 17))
-			self.group.gSymbol = ImageView((117, 76, 16, 17))
+			self.group.gField = StepEditText((108, 74, 72, 21), "", callback=self.fieldChanged)
+			self.group.hSymbol = ImageView((113, 12, 16, 17))
+			self.group.vSymbol = ImageView((113, 40, 16, 17))
+			self.group.gSymbol = ImageView((113, 76, 16, 17))
 			self.group.flipLabel = TextBox((6, 104, 100, 17), "Invert", alignment="right")
-			self.group.flip = CheckBox((112, 102, 24, 20), "", callback=self.fieldChanged)
-			self.group.cap = SegmentedButton((15, 132, 220, 36), [{"imageObject": cap_icon(i), "imageTemplate": False, "width": 44} for i in range(len(CAP_STYLES))],
+			self.group.flip = CheckBox((108, 104, 24, 20), "", callback=self.fieldChanged)
+			self.group.cap = SegmentedButton((30, 134, 190, 30), [{"imageObject": cap_icon(i), "imageTemplate": False, "width": 36} for i in range(len(CAP_STYLES))],
 				callback=self.fieldChanged, sizeStyle="regular")
 			self.group.cap.getNSSegmentedButton().setSegmentStyle_(0)  # automatic: the rounded gray track with a white pill
 			self.dialog = self.group.getNSView()
@@ -249,7 +251,7 @@ class KnotStroke(FilterWithDialog):
 				stepper.sizeToFit()
 				size = stepper.frame().size
 				margin = (21 - size.height) / 2.0  # same gap above, below and to the right of the stepper
-				x = 112 + 72 - size.width - margin
+				x = 108 + 72 - size.width - margin
 				InsetCell.right = size.width + margin + 2
 				stepper.setMinValue_(0)
 				stepper.setMaxValue_(100000)
