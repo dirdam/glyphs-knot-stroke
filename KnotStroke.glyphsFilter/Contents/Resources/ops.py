@@ -6,6 +6,8 @@ import objc
 from AppKit import NSPoint, NSClassFromString
 from GlyphsApp import GSLayer, GSPath, GSNode, LINE, CURVE, OFFCURVE
 
+import math
+
 import pathops
 
 OFFSET_CURVE = NSClassFromString("GlyphsFilterOffsetCurve")
@@ -132,30 +134,105 @@ def difference(a, b):
     return pathops.op(a, b, pathops.PathOp.DIFFERENCE)
 
 
+def contour_segments(contour):
+    """pathops contour -> (start point, [(c1, c2, end)]); c1 and c2 are None for a line."""
+    start = prev = None
+    segs = []
+    for verb, pts in contour.segments:
+        if verb == "moveTo":
+            start = prev = pts[0]
+            continue
+        if verb == "lineTo":
+            segs.append((None, None, pts[0]))
+        elif verb == "curveTo":
+            segs.append((pts[0], pts[1], pts[2]))
+        elif verb == "qCurveTo":
+            # quadratic -> cubic against the previous on-curve point
+            c, e = pts[0], pts[-1]
+            segs.append(((prev[0] + 2 * (c[0] - prev[0]) / 3, prev[1] + 2 * (c[1] - prev[1]) / 3),
+                         (e[0] + 2 * (c[0] - e[0]) / 3, e[1] + 2 * (c[1] - e[1]) / 3), e))
+        else:
+            continue
+        prev = segs[-1][2]
+    if start is not None and segs and segs[-1][2] != start:
+        segs.append((None, None, start))  # the implicit closing line, so the last node is the start point
+    return start, segs
+
+
+def drop_tiny_lines(start, segs, tol):
+    """Remove straight segments shorter than tol, pulling the previous segment's end onto them.
+
+    The cuts leave steps a fraction of a unit long next to the over strand; without this each one
+    costs a doubled node.
+    """
+    segs = list(segs)
+    i = 0
+    while i < len(segs) and len(segs) > 3:
+        c1, c2, end = segs[i]
+        begin = segs[i - 1][2]
+        if c1 is None and math.hypot(end[0] - begin[0], end[1] - begin[1]) < tol:
+            pc1, pc2, _ = segs[i - 1]
+            dx, dy = end[0] - begin[0], end[1] - begin[1]
+            segs[i - 1] = (pc1, None if pc2 is None else (pc2[0] + dx, pc2[1] + dy), end)
+            del segs[i]
+            i = max(i - 1, 0)
+            continue
+        i += 1
+    # a start point that was removed has been replaced by the previous segment's end
+    return segs[-1][2], segs
+
+
+def smooth_junctions(segs, max_angle=math.radians(4)):
+    """Align the handles at near-tangent curve-curve joins; return the indices of the segments whose end is smooth."""
+    smooth = []
+    n = len(segs)
+    for j in range(n):
+        a, b = segs[j], segs[(j + 1) % n]
+        if a[1] is None or b[0] is None:
+            continue
+        end = a[2]
+        d1 = (end[0] - a[1][0], end[1] - a[1][1])
+        d2 = (b[0][0] - end[0], b[0][1] - end[1])
+        l1, l2 = math.hypot(*d1), math.hypot(*d2)
+        if l1 < 1e-9 or l2 < 1e-9:
+            continue
+        cross = (d1[0] * d2[1] - d1[1] * d2[0]) / (l1 * l2)
+        dot = (d1[0] * d2[0] + d1[1] * d2[1]) / (l1 * l2)
+        if dot <= 0 or abs(math.atan2(cross, dot)) > max_angle:
+            continue
+        ux, uy = d1[0] / l1 + d2[0] / l2, d1[1] / l1 + d2[1] / l2
+        norm = math.hypot(ux, uy)
+        ux, uy = ux / norm, uy / norm
+        segs[j] = (a[0], (end[0] - ux * l1, end[1] - uy * l1), end)
+        segs[(j + 1) % n] = ((end[0] + ux * l2, end[1] + uy * l2), b[1], b[2])
+        smooth.append(j)
+    return smooth
+
+
 def pathops_to_layer(result, layer, replaced):
     """Replace the `replaced` paths of the layer with the contours of a pathops.Path; other paths stay."""
-    for path in replaced:
-        layer.removeShape_(path)
+    new_paths = []
     for contour in result.contours:
-        nodes = []
-        for verb, pts in contour.segments:
-            if verb == "moveTo":
-                continue
-            if verb == "lineTo":
-                nodes.append(GSNode(NSPoint(*pts[0]), LINE))
-            elif verb == "curveTo":
-                nodes += [GSNode(NSPoint(*pts[0]), OFFCURVE), GSNode(NSPoint(*pts[1]), OFFCURVE),
-                          GSNode(NSPoint(*pts[2]), CURVE)]
-            elif verb == "qCurveTo":
-                # quadratic -> cubic against the previous on-curve point
-                prev = (nodes[-1].position.x, nodes[-1].position.y) if nodes else contour.start_point
-                c, e = pts[0], pts[-1]
-                nodes += [GSNode(NSPoint(prev[0] + 2 * (c[0] - prev[0]) / 3, prev[1] + 2 * (c[1] - prev[1]) / 3), OFFCURVE),
-                          GSNode(NSPoint(e[0] + 2 * (c[0] - e[0]) / 3, e[1] + 2 * (c[1] - e[1]) / 3), OFFCURVE),
-                          GSNode(NSPoint(*e), CURVE)]
-        if len(nodes) < 2:
+        start, segs = contour_segments(contour)
+        if start is None or len(segs) < 2:
             continue
+        start, segs = drop_tiny_lines(start, segs, 1.0)
+        smooth = smooth_junctions(segs)
+        nodes, ends = [], []
+        for c1, c2, end in segs:
+            if c1 is None:
+                nodes.append(GSNode(NSPoint(*end), LINE))
+            else:
+                nodes += [GSNode(NSPoint(*c1), OFFCURVE), GSNode(NSPoint(*c2), OFFCURVE), GSNode(NSPoint(*end), CURVE)]
+            ends.append(nodes[-1])
+        for j in smooth:
+            ends[j].smooth = True
         gp = GSPath()
         gp.nodes = nodes
         gp.closed = True
+        new_paths.append(gp)
+    # only touch the layer once every contour converted, so a failure leaves the glyph as it was
+    for path in replaced:
+        layer.removeShape_(path)
+    for gp in new_paths:
         layer.shapes.append(gp)

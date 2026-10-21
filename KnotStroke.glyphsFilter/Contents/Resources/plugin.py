@@ -393,8 +393,10 @@ class KnotStroke(FilterWithDialog):
 				# 2 units wider than the real stroke: the piece's own offset can come out a hair narrower than the full
 				# stroke, which would leave a skin along the strand edges and close the gap into a tiny hole
 				under = ops.stroke_segments(knot.under_piece(paths, c, extent), False, width_x + 2, width_y + 2, cap)
-				# 1 unit wider than the real stroke so the cut leaves no slivers along the over strand's edges
-				over = ops.stroke_segments(knot.over_piece(paths, c, extent), False, width_x + 2, width_y + 2, cap)
+				# Slightly wider than the real stroke so the cut leaves no slivers along the over strand's edges.
+				# Whatever of the under strand survives in that margin shows as a ledge on the over strand's edge,
+				# so keep it well under a unit.
+				over = ops.stroke_segments(knot.over_piece(paths, c, extent), False, width_x + 0.6, width_y + 0.6, cap)
 				cuts.append(ops.difference(ops.intersection(band, under), over))
 
 			result = ops.difference(full, ops.union(cuts)) if cuts else full
