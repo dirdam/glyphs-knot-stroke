@@ -12,6 +12,7 @@
 from __future__ import division, print_function, unicode_literals
 import os
 import sys
+import time
 import traceback
 
 import objc
@@ -33,6 +34,24 @@ except Exception:  # ops needs Core Graphics path operations (macOS 13+) and Off
 
 PREFIX = "com.dirdam.KnotStroke."
 LOG_PATH = os.path.expanduser("~/Library/Logs/KnotStroke.log")
+
+
+RUN_MARK = "=== run "
+KEEP_RUNS = 3  # the log holds the last few runs of the filter, so it never grows
+
+
+def begin_run():
+	"""Start a new run in the log, dropping everything before the last KEEP_RUNS - 1 runs."""
+	try:
+		with open(LOG_PATH) as f:
+			lines = f.read().splitlines(True)
+		starts = [i for i, line in enumerate(lines) if line.startswith(RUN_MARK)]
+		kept = lines[starts[-(KEEP_RUNS - 1)]:] if len(starts) >= KEEP_RUNS - 1 else lines
+		with open(LOG_PATH, "w") as f:
+			f.writelines(kept)
+	except Exception:
+		pass
+	log("%s%s ===" % (RUN_MARK, time.strftime("%Y-%m-%d %H:%M:%S")))
 
 
 def log(message):
@@ -419,6 +438,7 @@ class KnotStroke(FilterWithDialog):
 
 	@objc.python_method
 	def filter(self, layer, inEditView, customParameters):
+		begin_run()
 		log("filter called; ops=%s inEditView=%s params=%s" % (ops is not None, inEditView, dict(customParameters)))
 		if ops is None:
 			log(IMPORT_ERROR)
