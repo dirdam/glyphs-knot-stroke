@@ -43,6 +43,77 @@ def log(message):
 	except Exception:
 		pass
 
+# Interface texts per language. Keys are the locale identifiers of the Glyphs plug-in manager; Glyphs.localize
+# picks the one matching the system language and falls back to English.
+TEXTS = {
+	"menu": {
+		"en": "Knot Stroke", "ar": "خط العقدة", "cs": "Uzlový tah", "de": "Knotenkontur", "es": "Trazo de nudo",
+		"fr": "Contour noué", "it": "Contorno a nodo", "ja": "結び目ストローク", "ko": "매듭 획", "pt": "Traço de nó",
+		"ru": "Узловой штрих", "tr": "Düğüm Konturu", "zh-Hans": "绳结描边", "zh-Hant": "繩結描邊",
+	},
+	"apply": {
+		"en": "Apply", "ar": "تطبيق", "cs": "Použít", "de": "Anwenden", "es": "Aplicar", "fr": "Appliquer",
+		"it": "Applica", "ja": "適用", "ko": "적용", "pt": "Aplicar", "ru": "Применить", "tr": "Uygula",
+		"zh-Hans": "应用", "zh-Hant": "套用",
+	},
+	"horizontal": {
+		"en": "Horizontal", "ar": "أفقي", "cs": "Vodorovně", "de": "Horizontal", "es": "Horizontal", "fr": "Horizontal",
+		"it": "Orizzontale", "ja": "水平", "ko": "가로", "pt": "Horizontal", "ru": "По горизонтали", "tr": "Yatay",
+		"zh-Hans": "水平", "zh-Hant": "水平",
+	},
+	"vertical": {
+		"en": "Vertical", "ar": "عمودي", "cs": "Svisle", "de": "Vertikal", "es": "Vertical", "fr": "Vertical",
+		"it": "Verticale", "ja": "垂直", "ko": "세로", "pt": "Vertical", "ru": "По вертикали", "tr": "Dikey",
+		"zh-Hans": "垂直", "zh-Hant": "垂直",
+	},
+	"gap": {
+		"en": "Gap", "ar": "فجوة", "cs": "Mezera", "de": "Abstand", "es": "Hueco", "fr": "Espace", "it": "Spazio",
+		"ja": "間隔", "ko": "간격", "pt": "Espaço", "ru": "Зазор", "tr": "Boşluk", "zh-Hans": "间隙", "zh-Hant": "間隙",
+	},
+	"invert": {
+		"en": "Invert", "ar": "عكس", "cs": "Obrátit", "de": "Umkehren", "es": "Invertir", "fr": "Inverser",
+		"it": "Inverti", "ja": "反転", "ko": "반전", "pt": "Inverter", "ru": "Инвертировать", "tr": "Ters çevir",
+		"zh-Hans": "反转", "zh-Hant": "反轉",
+	},
+	"needModule": {
+		"en": "Install skia-pathops in Glyphs > Settings > Addons > Modules.",
+		"ar": "ثبّت skia-pathops في Glyphs > Settings > Addons > Modules.",
+		"cs": "Nainstalujte skia-pathops v Glyphs > Settings > Addons > Modules.",
+		"de": "Installiere skia-pathops in Glyphs > Settings > Addons > Modules.",
+		"es": "Instala skia-pathops en Glyphs > Settings > Addons > Modules.",
+		"fr": "Installez skia-pathops dans Glyphs > Settings > Addons > Modules.",
+		"it": "Installa skia-pathops in Glyphs > Settings > Addons > Modules.",
+		"ja": "Glyphs > Settings > Addons > Modules で skia-pathops をインストールしてください。",
+		"ko": "Glyphs > Settings > Addons > Modules에서 skia-pathops를 설치하세요.",
+		"pt": "Instale o skia-pathops em Glyphs > Settings > Addons > Modules.",
+		"ru": "Установите skia-pathops в Glyphs > Settings > Addons > Modules.",
+		"tr": "skia-pathops'u Glyphs > Settings > Addons > Modules içinden yükleyin.",
+		"zh-Hans": "请在 Glyphs > Settings > Addons > Modules 中安装 skia-pathops。",
+		"zh-Hant": "請在 Glyphs > Settings > Addons > Modules 中安裝 skia-pathops。",
+	},
+	"failed": {
+		"en": "Failed; see the Macro window for details.",
+		"ar": "فشل التنفيذ؛ راجع نافذة Macro للتفاصيل.",
+		"cs": "Selhalo; podrobnosti jsou v okně Macro.",
+		"de": "Fehlgeschlagen; Details im Macro-Fenster.",
+		"es": "Error; consulta la ventana Macro para más detalles.",
+		"fr": "Échec ; voir la fenêtre Macro pour les détails.",
+		"it": "Operazione non riuscita; vedi la finestra Macro per i dettagli.",
+		"ja": "失敗しました。詳細は Macro ウィンドウを確認してください。",
+		"ko": "실패했습니다. 자세한 내용은 Macro 창을 확인하세요.",
+		"pt": "Falhou; veja a janela Macro para detalhes.",
+		"ru": "Не удалось; подробности в окне Macro.",
+		"tr": "Başarısız; ayrıntılar için Macro penceresine bakın.",
+		"zh-Hans": "失败；详情请查看 Macro 窗口。",
+		"zh-Hant": "失敗；詳情請查看 Macro 視窗。",
+	},
+}
+
+
+def tr(key):
+	return Glyphs.localize(TEXTS[key])
+
+
 DEFAULTS = {"horizontal": 40.0, "vertical": 40.0, "gap": 14.0, "flip": False, "linked": True, "cap": 0}
 
 
@@ -206,14 +277,8 @@ class KnotStroke(FilterWithDialog):
 	# No class-level `dialog` IBOutlet: with a Vanilla dialog Glyphs expects it to be set in settings().
 	@objc.python_method
 	def settings(self):
-		self.menuName = Glyphs.localize({
-			'en': 'Knot Stroke',
-			'es': 'Trazo de nudo',
-			'de': 'Knotenkontur',
-			'fr': 'Contour noué',
-			'jp': '結び目ストローク',
-		})
-		self.actionButtonLabel = Glyphs.localize({'en': 'Apply', 'es': 'Aplicar', 'de': 'Anwenden', 'fr': 'Appliquer', 'jp': '適用'})
+		self.menuName = tr("menu")
+		self.actionButtonLabel = tr("apply")
 
 		for key, value in DEFAULTS.items():
 			Glyphs.registerDefault(PREFIX + key, value)
@@ -221,17 +286,17 @@ class KnotStroke(FilterWithDialog):
 		try:
 			self.group = Group((0, 0, 216, 176))
 			# columns: label (right-aligned), then the number field holding its symbol on the left and its stepper on the right
-			self.group.hLabel = TextBox((6, 12, 100, 17), "Horizontal", alignment="right")
+			self.group.hLabel = TextBox((6, 12, 100, 17), tr("horizontal"), alignment="right")
 			self.group.hField = StepEditText((108, 10, 72, 21), "", callback=self.fieldChanged)
-			self.group.vLabel = TextBox((6, 40, 100, 17), "Vertical", alignment="right")
+			self.group.vLabel = TextBox((6, 40, 100, 17), tr("vertical"), alignment="right")
 			self.group.vField = StepEditText((108, 38, 72, 21), "", callback=self.fieldChanged)
 			self.group.lock = ImageButton((182, 24, 20, 22), bordered=False, callback=self.lockClicked)
-			self.group.gLabel = TextBox((6, 76, 100, 17), "Gap", alignment="right")
+			self.group.gLabel = TextBox((6, 76, 100, 17), tr("gap"), alignment="right")
 			self.group.gField = StepEditText((108, 74, 72, 21), "", callback=self.fieldChanged)
 			self.group.hSymbol = ImageView((113, 12, 16, 17))
 			self.group.vSymbol = ImageView((113, 40, 16, 17))
 			self.group.gSymbol = ImageView((113, 76, 16, 17))
-			self.group.flipLabel = TextBox((6, 104, 100, 17), "Invert", alignment="right")
+			self.group.flipLabel = TextBox((6, 104, 100, 17), tr("invert"), alignment="right")
 			self.group.flip = CheckBox((108, 104, 24, 20), "", callback=self.fieldChanged)
 			self.group.cap = SegmentedButton((14, 134, 188, 30), [{"imageObject": cap_icon(i), "imageTemplate": False, "width": 36} for i in range(len(CAP_STYLES))],
 				callback=self.fieldChanged, sizeStyle="regular")
@@ -373,7 +438,7 @@ class KnotStroke(FilterWithDialog):
 		log("filter called; ops=%s inEditView=%s params=%s" % (ops is not None, inEditView, dict(customParameters)))
 		if ops is None:
 			log(IMPORT_ERROR)
-			Glyphs.showNotification("Knot Stroke", "Install skia-pathops in Glyphs > Settings > Addons > Modules.")
+			Glyphs.showNotification(tr("menu"), tr("needModule"))
 			print(IMPORT_ERROR)
 			return
 		width_x, width_y, gap, flip, cap = self.readSettings(customParameters)
@@ -418,7 +483,7 @@ class KnotStroke(FilterWithDialog):
 		except Exception:
 			log(traceback.format_exc())
 			print(traceback.format_exc())
-			Glyphs.showNotification("Knot Stroke", "Failed; see the Macro window for details.")
+			Glyphs.showNotification(tr("menu"), tr("failed"))
 
 	@objc.python_method
 	def generateCustomParameter(self):
