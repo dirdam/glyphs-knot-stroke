@@ -10,6 +10,8 @@ import math
 
 import pathops
 
+TINY = 1.5  # shorter than this, a segment is a leftover step of a cut, not outline
+
 OFFSET_CURVE = NSClassFromString("GlyphsFilterOffsetCurve")
 
 
@@ -159,8 +161,8 @@ def contour_segments(contour):
     return start, segs
 
 
-def drop_tiny_lines(start, segs, tol):
-    """Remove straight segments shorter than tol, pulling the previous segment's end onto them.
+def drop_tiny_segments(start, segs, tol):
+    """Remove segments (straight or curved) that stay within tol of their start, pulling the previous end onto them.
 
     The cuts leave steps a fraction of a unit long next to the over strand; without this each one
     costs a doubled node.
@@ -170,7 +172,8 @@ def drop_tiny_lines(start, segs, tol):
     while i < len(segs) and len(segs) > 3:
         c1, c2, end = segs[i]
         begin = segs[i - 1][2]
-        if c1 is None and math.hypot(end[0] - begin[0], end[1] - begin[1]) < tol:
+        pts = [end] + ([c1, c2] if c1 is not None else [])
+        if all(math.hypot(p[0] - begin[0], p[1] - begin[1]) < tol for p in pts):
             pc1, pc2, _ = segs[i - 1]
             dx, dy = end[0] - begin[0], end[1] - begin[1]
             segs[i - 1] = (pc1, None if pc2 is None else (pc2[0] + dx, pc2[1] + dy), end)
@@ -216,7 +219,7 @@ def pathops_to_layer(result, layer, replaced):
         start, segs = contour_segments(contour)
         if start is None or len(segs) < 2:
             continue
-        start, segs = drop_tiny_lines(start, segs, 1.0)
+        start, segs = drop_tiny_segments(start, segs, TINY)
         smooth = smooth_junctions(segs)
         nodes, ends = [], []
         for c1, c2, end in segs:
