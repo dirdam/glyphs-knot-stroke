@@ -50,6 +50,10 @@ through the gap of another crossing may get nicked. Tangential touches are not t
 Geometry (crossings, over/under) lives in `knot.py` and is tested without Glyphs:
 `python3 -I -m unittest discover -s tests`.
 
+## Support
+
+Knot Stroke is free. If it is useful to you, you can [buy me a coffee on Ko-fi](https://ko-fi.com/dirdam).
+
 ## License
 
 MIT, © 2026 [Adrián Jiménez Pascual](https://dirdam.github.io). The `Contents/MacOS/plugin` loader comes from the

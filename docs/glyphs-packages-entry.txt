@@ -37,4 +37,5 @@
 	minGlyphsVersion = "3.0";
 	minSystemVersion = "13.0";
 	dependencies = (vanilla);
+	donationURL = "https://ko-fi.com/dirdam";
 },
