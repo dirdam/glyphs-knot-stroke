@@ -185,6 +185,123 @@ def drop_tiny_segments(start, segs, tol):
     return segs[-1][2], segs
 
 
+def _bez(p0, p1, p2, p3, u):
+    m = 1 - u
+    a, b, c, d = m * m * m, 3 * m * m * u, 3 * m * u * u, u * u * u
+    return (a * p0[0] + b * p1[0] + c * p2[0] + d * p3[0], a * p0[1] + b * p1[1] + c * p2[1] + d * p3[1])
+
+
+def _dist_to_polyline(p, poly):
+    best = float("inf")
+    for a, b in zip(poly, poly[1:]):
+        dx, dy = b[0] - a[0], b[1] - a[1]
+        l2 = dx * dx + dy * dy
+        t = 0.0 if l2 == 0 else max(0.0, min(1.0, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / l2))
+        best = min(best, math.hypot(p[0] - a[0] - t * dx, p[1] - a[1] - t * dy))
+    return best
+
+
+def _has_interior_extremum(p0, p1, p2, p3):
+    for k in (0, 1):
+        # derivative of a cubic is a quadratic in u
+        a = 3 * (-p0[k] + 3 * p1[k] - 3 * p2[k] + p3[k])
+        b = 6 * (p0[k] - 2 * p1[k] + p2[k])
+        c = 3 * (p1[k] - p0[k])
+        roots = []
+        if abs(a) < 1e-9:
+            if abs(b) > 1e-9:
+                roots = [-c / b]
+        else:
+            disc = b * b - 4 * a * c
+            if disc >= 0:
+                r = math.sqrt(disc)
+                roots = [(-b + r) / (2 * a), (-b - r) / (2 * a)]
+        if any(0.01 < u < 0.99 for u in roots):
+            return True
+    return False
+
+
+def merge_two_curves(a, a_begin, b, tol):
+    """One cubic standing in for consecutive cubics a and b, or None when it would not match within tol."""
+    p0, p3 = a_begin, b[2]
+    t0 = (a[0][0] - p0[0], a[0][1] - p0[1])
+    t3 = (p3[0] - b[1][0], p3[1] - b[1][1])
+    l0, l3 = math.hypot(*t0), math.hypot(*t3)
+    if l0 < 1e-9 or l3 < 1e-9:
+        return None
+    t0, t3 = (t0[0] / l0, t0[1] / l0), (t3[0] / l3, t3[1] / l3)
+    n = 12
+    samples = [_bez(a_begin, a[0], a[1], a[2], k / n) for k in range(n)]
+    samples += [_bez(a[2], b[0], b[1], b[2], k / n) for k in range(n + 1)]
+    acc, us = 0.0, [0.0]
+    for q, r in zip(samples, samples[1:]):
+        acc += math.hypot(r[0] - q[0], r[1] - q[1])
+        us.append(acc)
+    if acc < 1e-9:
+        return None
+    us = [u / acc for u in us]
+    c00 = c01 = c11 = x0 = x1 = 0.0
+    for d, u in zip(samples, us):
+        m = 1 - u
+        b0, b1, b2, b3 = m * m * m, 3 * m * m * u, 3 * m * u * u, u * u * u
+        a1 = (t0[0] * b1, t0[1] * b1)
+        a2 = (-t3[0] * b2, -t3[1] * b2)
+        tmp = (d[0] - (p0[0] * (b0 + b1) + p3[0] * (b2 + b3)), d[1] - (p0[1] * (b0 + b1) + p3[1] * (b2 + b3)))
+        c00 += a1[0] * a1[0] + a1[1] * a1[1]
+        c01 += a1[0] * a2[0] + a1[1] * a2[1]
+        c11 += a2[0] * a2[0] + a2[1] * a2[1]
+        x0 += a1[0] * tmp[0] + a1[1] * tmp[1]
+        x1 += a2[0] * tmp[0] + a2[1] * tmp[1]
+    det = c00 * c11 - c01 * c01
+    if abs(det) < 1e-12:
+        return None
+    alpha, beta = (x0 * c11 - x1 * c01) / det, (c00 * x1 - c01 * x0) / det
+    if alpha <= 0 or beta <= 0:
+        return None
+    p1 = (p0[0] + t0[0] * alpha, p0[1] + t0[1] * alpha)
+    p2 = (p3[0] - t3[0] * beta, p3[1] - t3[1] * beta)
+    if _has_interior_extremum(p0, p1, p2, p3):
+        return None
+    fitted = [_bez(p0, p1, p2, p3, k / 40.0) for k in range(41)]
+    if any(_dist_to_polyline(q, fitted) > tol for q in samples):
+        return None
+    original = [_bez(a_begin, a[0], a[1], a[2], k / 20.0) for k in range(21)] + \
+               [_bez(a[2], b[0], b[1], b[2], k / 20.0) for k in range(21)]
+    if any(_dist_to_polyline(q, original) > tol for q in fitted):
+        return None
+    return (p1, p2, p3)
+
+
+def merge_smooth_curves(start, segs, tol=0.25, max_angle=math.radians(4)):
+    """Join consecutive curves that are one smooth curve cut in pieces.
+
+    The offset engine and the cuts split edges into several pieces; merging them leaves nodes only
+    where the outline really needs them. Nodes on a horizontal or vertical tangent (extremes) stay.
+    """
+    segs = list(segs)
+    i = 0
+    while i < len(segs) and len(segs) > 3:
+        a, b = segs[i - 1], segs[i]
+        if a[1] is not None and b[0] is not None and i > 0:
+            end = a[2]
+            d1 = (end[0] - a[1][0], end[1] - a[1][1])
+            d2 = (b[0][0] - end[0], b[0][1] - end[1])
+            l1, l2 = math.hypot(*d1), math.hypot(*d2)
+            if l1 > 1e-9 and l2 > 1e-9:
+                dot = (d1[0] * d2[0] + d1[1] * d2[1]) / (l1 * l2)
+                cross = (d1[0] * d2[1] - d1[1] * d2[0]) / (l1 * l2)
+                axis = min(abs(d1[0]), abs(d1[1])) / l1 < math.sin(math.radians(1))
+                if dot > 0 and abs(math.atan2(cross, dot)) < max_angle and not axis:
+                    begin = segs[i - 2][2]
+                    merged = merge_two_curves(a, begin, b, tol)
+                    if merged:
+                        segs[i - 1:i + 1] = [merged]
+                        i = max(i - 1, 1)
+                        continue
+        i += 1
+    return segs[-1][2], segs
+
+
 def smooth_junctions(segs, max_angle=math.radians(4)):
     """Align the handles at near-tangent curve-curve joins; return the indices of the segments whose end is smooth."""
     smooth = []
@@ -220,6 +337,7 @@ def pathops_to_layer(result, layer, replaced):
         if start is None or len(segs) < 2:
             continue
         start, segs = drop_tiny_segments(start, segs, TINY)
+        start, segs = merge_smooth_curves(start, segs)
         smooth = smooth_junctions(segs)
         nodes, ends = [], []
         for c1, c2, end in segs:
