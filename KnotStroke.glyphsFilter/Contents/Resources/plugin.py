@@ -289,6 +289,18 @@ class KnotStroke(FilterWithDialog):
 		except Exception:
 			log("centering failed:\n" + traceback.format_exc())
 		self.showLock(bool(Glyphs.defaults[PREFIX + "linked"]))
+		self.group.cap.enable(self.hasOpenPaths())
+
+	@objc.python_method
+	def hasOpenPaths(self):
+		"""False when every path about to be knotted is closed: end styles only apply to open paths."""
+		try:
+			layer = Glyphs.font.selectedLayers[0]
+			targets = ops.selected_paths(layer)
+			return not targets or any(not p.closed for p in targets)
+		except Exception:
+			log("open-path check failed:\n" + traceback.format_exc())
+			return True
 
 	@objc.python_method
 	def syncSteppers(self):

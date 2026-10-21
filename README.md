@@ -25,7 +25,7 @@ and the stepper inside the field adds/subtracts 1 per click.
 | --- | --- |
 | Horizontal / Vertical | Stroke width in each direction, as in Offset Curve |
 | Lock icon | While locked, Vertical is grayed out and follows Horizontal |
-| Ends | How open paths end. Same 5 positions as in Offset Curve |
+| Ends | How open paths end. Same 5 positions as in Offset Curve. Grayed out when every path is closed |
 | Gap | Space kept clear on each side of the over-strand |
 | Invert | Swap which strand starts on top |
 
