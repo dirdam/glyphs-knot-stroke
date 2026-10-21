@@ -390,12 +390,15 @@ class KnotStroke(FilterWithDialog):
 				sine = max(knot.crossing_sine(paths[pa], sa, paths[pb], sb), 0.25)
 				extent = (width + gap) / sine + width
 				band = ops.stroke_segments(knot.over_piece(paths, c, extent), False, width_x + 2 * gap, width_y + 2 * gap, cap)
-				under = ops.stroke_segments(knot.under_piece(paths, c, extent), False, width_x, width_y, cap)
+				# 2 units wider than the real stroke: the piece's own offset can come out a hair narrower than the full
+				# stroke, which would leave a skin along the strand edges and close the gap into a tiny hole
+				under = ops.stroke_segments(knot.under_piece(paths, c, extent), False, width_x + 2, width_y + 2, cap)
 				# 1 unit wider than the real stroke so the cut leaves no slivers along the over strand's edges
 				over = ops.stroke_segments(knot.over_piece(paths, c, extent), False, width_x + 2, width_y + 2, cap)
 				cuts.append(ops.difference(ops.intersection(band, under), over))
 
 			result = ops.difference(full, ops.union(cuts)) if cuts else full
+			log("contour areas: %s" % [round(c.area) for c in result.contours])
 			ops.pathops_to_layer(result, layer, targets)
 			log("done: %d contours written" % len(list(result.contours)))
 		except Exception:
