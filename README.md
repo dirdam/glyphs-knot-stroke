@@ -4,6 +4,8 @@ A [Glyphs 3](https://glyphsapp.com) filter that turns centerline paths into a wo
 paths like Offset Curve (separate horizontal and vertical width) and, at every crossing, cuts the
 under-strand so strands pass alternately over and under.
 
+![Knot Stroke turning a trefoil centerline into a woven knot](docs/KnotStroke.png)
+
 ## Install
 
 Requires Glyphs 3 with the Python and skia-pathops modules (step 1 below). Developed and tested on macOS.
