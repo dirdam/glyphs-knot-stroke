@@ -21,23 +21,17 @@ glyph is left alone; with nothing selected, all paths are.
 In every number field (Horizontal, Vertical, Gap) the up/down arrow keys add/subtract 1 (10 with Shift),
 and the stepper inside the field adds/subtracts 1 per click.
 
-| Setting | Meaning |
-| --- | --- |
-| Horizontal / Vertical | Stroke width in each direction, as in Offset Curve |
-| Lock icon | While locked, Vertical is grayed out and follows Horizontal |
-| Ends | How open paths end. Same 5 positions as in Offset Curve. Grayed out when every path is closed |
-| Gap | Space kept clear on each side of the over-strand |
-| Invert | Swap which strand starts on top |
+| Setting | Key | Values | Meaning |
+| --- | --- | --- | --- |
+| Horizontal | `horizontal` | number, above 0 | Stroke width in the horizontal direction, as in Offset Curve |
+| Vertical | `vertical` | number, above 0 | Stroke width in the vertical direction |
+| Lock icon | | | While locked, Vertical is grayed out and follows Horizontal. Not a custom parameter key |
+| Ends | `cap` | 0 to 4 | How open paths end: the button position from the left, the same 5 as in Offset Curve. Grayed out when every path is closed |
+| Gap | `gap` | number, 0 or more | Space kept clear on each side of the over-strand |
+| Invert | `flip` | 0 or 1 | 1 swaps which strand starts on top |
 
-It can also be used as a custom parameter on export:
+It can also be used as a custom parameter on export, with the keys above:
 `Filter = KnotStroke; horizontal:40; vertical:40; gap:14; flip:0; cap:0`.
-
-| Key | Meaning |
-| --- | --- |
-| `horizontal`, `vertical` | Stroke width in each direction |
-| `gap` | Space kept clear on each side of the over-strand |
-| `flip` | `1` swaps which strand starts on top |
-| `cap` | Ends button position from the left, 0 to 4 |
 
 ## Uninstall
 
