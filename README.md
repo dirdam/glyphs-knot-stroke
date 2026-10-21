@@ -52,7 +52,7 @@ Geometry (crossings, over/under) lives in `knot.py` and is tested without Glyphs
 
 ## Support
 
-Knot Stroke is free. If it is useful to you, you can [buy me a coffee on Ko-fi](https://ko-fi.com/dirdam).
+Knot Stroke is free. If it is useful to you, you can [buy me a mocktail on Ko-fi](https://ko-fi.com/dirdam).
 
 ## License
 
