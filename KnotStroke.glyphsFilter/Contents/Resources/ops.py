@@ -1,14 +1,18 @@
 # encoding: utf-8
-"""Glyphs <-> geometry glue: read paths, stroke them with Offset Curve, boolean with skia-pathops."""
+"""Glyphs <-> geometry glue: read paths, stroke them with Offset Curve, boolean with Core Graphics (macOS 13+).
+
+A "shape" here is a CGPath of closed subpaths filled with the non-zero rule."""
 
 from __future__ import division, print_function, unicode_literals
 import objc
 from AppKit import NSPoint, NSClassFromString
+from Quartz import (CGPathCreateMutable, CGPathMoveToPoint, CGPathAddLineToPoint, CGPathAddCurveToPoint,
+                    CGPathCloseSubpath, CGPathApply, CGPathIsEmpty, CGPathGetBoundingBox,
+                    CGPathCreateCopyByUnioningPath, CGPathCreateCopyBySubtractingPath,
+                    CGPathCreateCopyByIntersectingPath, CGPathCreateCopyByNormalizing)
 from GlyphsApp import GSLayer, GSPath, GSNode, LINE, CURVE, OFFCURVE
 
 import math
-
-import pathops
 
 TINY = 1.5  # shorter than this, a segment is a leftover step of a cut, not outline
 
@@ -83,7 +87,7 @@ def build_gspath(segments, closed):
 
 
 def stroke_paths(path_dicts, width_x, width_y, cap=0):
-    """Stroke centerlines with the built-in Offset Curve engine; return a pathops.Path."""
+    """Stroke centerlines with the built-in Offset Curve engine; return a shape."""
     tmp = GSLayer()
     for p in path_dicts:
         if p["segments"]:
@@ -91,74 +95,99 @@ def stroke_paths(path_dicts, width_x, width_y, cap=0):
     # Glyphs 3 signature (see OffsetCurve.glyphsFilter/Contents/Headers); cap is a GSLineCapStyle (0 = butt).
     OFFSET_CURVE.offsetLayer_offsetX_offsetY_makeStroke_autoStroke_position_metrics_error_shadow_capStyleStart_capStyleEnd_keepCompatibleOutlines_(
         tmp, width_x / 2.0, width_y / 2.0, True, False, 0.5, None, None, None, cap, cap, False)
-    return layer_to_pathops(tmp)
+    return layer_to_shape(tmp)
 
 
 def stroke_segments(segments, closed, width_x, width_y, cap=0):
     return stroke_paths([{"segments": segments, "closed": closed}], width_x, width_y, cap)
 
 
-def layer_to_pathops(layer):
-    result = pathops.Path()
-    pen = result.getPen()
+def layer_to_shape(layer):
+    """Closed paths of a layer -> shape."""
+    shape = CGPathCreateMutable()
     for path in layer.paths:
         nodes = [path.nodes[i] for i in range(len(path.nodes))]
         if len(nodes) < 3 or not path.closed:
             continue
-        pen.moveTo((nodes[-1].position.x, nodes[-1].position.y))
+        CGPathMoveToPoint(shape, None, nodes[-1].position.x, nodes[-1].position.y)
         pending = []
         for n in nodes:
             pt = (n.position.x, n.position.y)
             if n.type == OFFCURVE:
                 pending.append(pt)
             elif n.type == CURVE and len(pending) == 2:
-                pen.curveTo(pending[0], pending[1], pt)
+                CGPathAddCurveToPoint(shape, None, pending[0][0], pending[0][1], pending[1][0], pending[1][1], pt[0], pt[1])
                 pending = []
             else:
-                pen.lineTo(pt)
+                CGPathAddLineToPoint(shape, None, pt[0], pt[1])
                 pending = []
-        pen.closePath()
-    return result
+        CGPathCloseSubpath(shape)
+    return CGPathCreateCopyByNormalizing(shape, False)
 
 
-def union(paths):
-    result = pathops.Path()
-    for p in paths:
-        result = pathops.op(result, p, pathops.PathOp.UNION) if len(result) else p
-    return result
-
-
-def intersection(a, b):
-    return pathops.op(a, b, pathops.PathOp.INTERSECTION)
+def union(shapes):
+    result = CGPathCreateMutable()
+    for shape in shapes:
+        result = CGPathCreateCopyByUnioningPath(result, shape, False)
+    return CGPathCreateCopyByNormalizing(result, False)
 
 
 def difference(a, b):
-    return pathops.op(a, b, pathops.PathOp.DIFFERENCE)
+    if CGPathIsEmpty(a) or CGPathIsEmpty(b):
+        return a
+    return CGPathCreateCopyBySubtractingPath(a, b, False)
 
 
-def contour_segments(contour):
-    """pathops contour -> (start point, [(c1, c2, end)]); c1 and c2 are None for a line."""
-    start = prev = None
-    segs = []
-    for verb, pts in contour.segments:
-        if verb == "moveTo":
-            start = prev = pts[0]
-            continue
-        if verb == "lineTo":
-            segs.append((None, None, pts[0]))
-        elif verb == "curveTo":
-            segs.append((pts[0], pts[1], pts[2]))
-        elif verb == "qCurveTo":
-            # quadratic -> cubic against the previous on-curve point
-            c, e = pts[0], pts[-1]
-            segs.append(((prev[0] + 2 * (c[0] - prev[0]) / 3, prev[1] + 2 * (c[1] - prev[1]) / 3),
-                         (e[0] + 2 * (c[0] - e[0]) / 3, e[1] + 2 * (c[1] - e[1]) / 3), e))
-        else:
-            continue
-        prev = segs[-1][2]
-    if start is not None and segs and segs[-1][2] != start:
-        segs.append((None, None, start))  # the implicit closing line, so the last node is the start point
-    return start, segs
+def intersection(a, b):
+    if CGPathIsEmpty(a) or CGPathIsEmpty(b):
+        return CGPathCreateMutable()
+    return CGPathCreateCopyByIntersectingPath(a, b, False)
+
+
+def subpaths(shape):
+    """Shape -> [(start point, [(c1, c2, end)])], one per closed subpath; c1 and c2 are None for a line."""
+    out = []
+    state = {"start": None, "cur": None, "segs": None}
+
+    def finish():
+        if state["segs"] and state["cur"] != state["start"]:
+            state["segs"].append((None, None, state["start"]))  # the implicit closing line
+        if state["segs"]:
+            out.append((state["start"], state["segs"]))
+        state["segs"] = None
+
+    def visit(info, element):
+        kind, p = element.type, element.points
+        if kind == 0:
+            finish()
+            state["start"] = state["cur"] = (p[0].x, p[0].y)
+            state["segs"] = []
+        elif state["segs"] is None:
+            return
+        elif kind == 1:
+            state["cur"] = (p[0].x, p[0].y)
+            state["segs"].append((None, None, state["cur"]))
+        elif kind == 2:  # quadratic -> cubic against the current point
+            cur, c, e = state["cur"], (p[0].x, p[0].y), (p[1].x, p[1].y)
+            state["segs"].append(((cur[0] + 2 * (c[0] - cur[0]) / 3, cur[1] + 2 * (c[1] - cur[1]) / 3),
+                                  (e[0] + 2 * (c[0] - e[0]) / 3, e[1] + 2 * (c[1] - e[1]) / 3), e))
+            state["cur"] = e
+        elif kind == 3:
+            state["cur"] = (p[2].x, p[2].y)
+            state["segs"].append(((p[0].x, p[0].y), (p[1].x, p[1].y), state["cur"]))
+        elif kind == 4:
+            finish()
+
+    CGPathApply(shape, None, visit)
+    finish()
+    return out
+
+
+def describe(shape):
+    """Short text for the log: subpath count and bounds."""
+    box = CGPathGetBoundingBox(shape)
+    return "%d subpaths%s" % (len(subpaths(shape)), "" if CGPathIsEmpty(shape) else
+                              " [%.0f,%.0f %.0fx%.0f]" % (box.origin.x, box.origin.y, box.size.width, box.size.height))
 
 
 def drop_tiny_segments(start, segs, tol):
@@ -329,12 +358,11 @@ def smooth_junctions(segs, max_angle=math.radians(4)):
     return smooth
 
 
-def pathops_to_layer(result, layer, replaced):
-    """Replace the `replaced` paths of the layer with the contours of a pathops.Path; other paths stay."""
+def shape_to_layer(result, layer, replaced):
+    """Replace the `replaced` paths of the layer with the paths of a shape; other paths stay."""
     new_paths = []
-    for contour in result.contours:
-        start, segs = contour_segments(contour)
-        if start is None or len(segs) < 2:
+    for start, segs in subpaths(result):
+        if len(segs) < 2:
             continue
         start, segs = drop_tiny_segments(start, segs, TINY)
         start, segs = merge_smooth_curves(start, segs)

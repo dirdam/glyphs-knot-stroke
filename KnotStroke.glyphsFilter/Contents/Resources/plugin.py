@@ -27,7 +27,7 @@ import knot
 try:
 	import ops
 	IMPORT_ERROR = None
-except Exception:  # most likely: skia-pathops is not installed in Glyphs' Python
+except Exception:  # ops needs Core Graphics path operations (macOS 13+) and Offset Curve; log why it is missing
 	ops = None
 	IMPORT_ERROR = traceback.format_exc()
 
@@ -74,22 +74,6 @@ TEXTS = {
 		"en": "Invert", "ar": "عكس", "cs": "Obrátit", "de": "Umkehren", "es": "Invertir", "fr": "Inverser",
 		"it": "Inverti", "ja": "反転", "ko": "반전", "pt": "Inverter", "ru": "Инвертировать", "tr": "Ters çevir",
 		"zh-Hans": "反转", "zh-Hant": "反轉",
-	},
-	"needModule": {
-		"en": "Install skia-pathops in Glyphs > Settings > Addons > Modules.",
-		"ar": "ثبّت skia-pathops في Glyphs > Settings > Addons > Modules.",
-		"cs": "Nainstalujte skia-pathops v Glyphs > Settings > Addons > Modules.",
-		"de": "Installiere skia-pathops in Glyphs > Settings > Addons > Modules.",
-		"es": "Instala skia-pathops en Glyphs > Settings > Addons > Modules.",
-		"fr": "Installez skia-pathops dans Glyphs > Settings > Addons > Modules.",
-		"it": "Installa skia-pathops in Glyphs > Settings > Addons > Modules.",
-		"ja": "Glyphs > Settings > Addons > Modules で skia-pathops をインストールしてください。",
-		"ko": "Glyphs > Settings > Addons > Modules에서 skia-pathops를 설치하세요.",
-		"pt": "Instale o skia-pathops em Glyphs > Settings > Addons > Modules.",
-		"ru": "Установите skia-pathops в Glyphs > Settings > Addons > Modules.",
-		"tr": "skia-pathops'u Glyphs > Settings > Addons > Modules içinden yükleyin.",
-		"zh-Hans": "请在 Glyphs > Settings > Addons > Modules 中安装 skia-pathops。",
-		"zh-Hant": "請在 Glyphs > Settings > Addons > Modules 中安裝 skia-pathops。",
 	},
 	"failed": {
 		"en": "Failed; see the Macro window for details.",
@@ -438,7 +422,7 @@ class KnotStroke(FilterWithDialog):
 		log("filter called; ops=%s inEditView=%s params=%s" % (ops is not None, inEditView, dict(customParameters)))
 		if ops is None:
 			log(IMPORT_ERROR)
-			Glyphs.showNotification(tr("menu"), tr("needModule"))
+			Glyphs.showNotification(tr("menu"), tr("failed"))
 			print(IMPORT_ERROR)
 			return
 		width_x, width_y, gap, flip, cap = self.readSettings(customParameters)
@@ -452,7 +436,7 @@ class KnotStroke(FilterWithDialog):
 			if not paths:
 				return
 			full = ops.stroke_paths(paths, width_x, width_y, cap)
-			log("stroke done: %d contours" % len(list(full.contours)))
+			log("stroke done: %s" % ops.describe(full))
 			crossings = knot.assign_over_under(paths, knot.find_crossings(paths), flip=flip)
 			log("crossings: %d" % len(crossings))
 
@@ -461,7 +445,7 @@ class KnotStroke(FilterWithDialog):
 			# Nothing is re-added, so no butt-ended pieces end up glued onto the outline.
 			width = max(width_x, width_y)
 			cuts = []
-			for c in crossings:
+			for ci, c in enumerate(crossings):
 				pa, sa = c["a"]
 				pb, sb = c["b"]
 				sine = max(knot.crossing_sine(paths[pa], sa, paths[pb], sb), 0.25)
@@ -474,12 +458,17 @@ class KnotStroke(FilterWithDialog):
 				# Whatever of the under strand survives in that margin shows as a ledge on the over strand's edge,
 				# so keep it well under a unit.
 				over = ops.stroke_segments(knot.over_piece(paths, c, extent), False, width_x + 0.6, width_y + 0.6, cap)
-				cuts.append(ops.difference(ops.intersection(band, under), over))
+				inter = ops.intersection(band, under)
+				cut = ops.difference(inter, over)
+				log("crossing %d at s=%.2f/%.2f sine=%.2f: band %s under %s over %s inter %s cut %s" % (
+					ci, sa, sb, sine, ops.describe(band), ops.describe(under), ops.describe(over), ops.describe(inter), ops.describe(cut)))
+				cuts.append(cut)
 
-			result = ops.difference(full, ops.union(cuts)) if cuts else full
-			log("contour areas: %s" % [round(c.area) for c in result.contours])
-			ops.pathops_to_layer(result, layer, targets)
-			log("done: %d contours written" % len(list(result.contours)))
+			all_cuts = ops.union(cuts)
+			log("full %s; all cuts %s" % (ops.describe(full), ops.describe(all_cuts)))
+			result = ops.difference(full, all_cuts)
+			ops.shape_to_layer(result, layer, targets)
+			log("done: %s" % ops.describe(result))
 		except Exception:
 			log(traceback.format_exc())
 			print(traceback.format_exc())

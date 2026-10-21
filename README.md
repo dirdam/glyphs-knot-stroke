@@ -8,9 +8,9 @@ under-strand so strands pass alternately over and under.
 
 ## Install
 
-Requires Glyphs 3 with the Python and skia-pathops modules (step 1 below). Developed and tested on macOS.
+Requires Glyphs 3 on macOS 13 or later, with the Python and Vanilla modules (step 1 below).
 
-1. In Glyphs: Settings > Addons > Modules, install **Python**, then **skia-pathops** (used for the boolean operations).
+1. In Glyphs: Settings > Addons > Modules, install **Python** and **Vanilla** (the Plugin Manager does this for you).
 2. Copy `KnotStroke.glyphsFilter` into `~/Library/Application Support/Glyphs 3/Plugins/`
    (or run `./install.sh` to link it), and restart Glyphs.
 
